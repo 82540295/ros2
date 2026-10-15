@@ -1,0 +1,15 @@
+# Waypoint mission definition.
+# Positions are ENU (x: east, y: north, z: up) in metres, relative to the drone
+# takeoff point (the simulator spawn location). Edit this file to change the
+# flight pattern; `python3 main.py test` validates the schema offline.
+mission:
+  name: town01_square
+  takeoff_altitude_m: 3.0
+  cruise_speed_mps: 2.0
+  land_speed_mps: 0.5
+  waypoint_timeout_s: 60.0
+  waypoints:
+    - {name: wp1_east,  x: 10.0, y: 0.0,  z: 3.0}
+    - {name: wp2_north, x: 10.0, y: 10.0, z: 4.0}
+    - {name: wp3_west,  x: 0.0,  y: 10.0, z: 3.0}
+    - {name: wp4_home,  x: 0.0,  y: 0.0,  z: 3.0}
