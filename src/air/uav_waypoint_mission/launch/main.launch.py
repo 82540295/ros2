@@ -17,7 +17,11 @@ def generate_launch_description():
             description='Absolute path of the waypoint mission YAML file'),
         DeclareLaunchArgument('rviz', default_value='false',
             description='Start RViz2 with the mission view (true/false)'),
-        # The mission controller and teleop nodes are added in later commits.
+        DeclareLaunchArgument('autostart', default_value='false',
+            description='Arm and start the mission automatically a few seconds after launch (true/false)'),
         Node(package='uav_waypoint_mission', executable='uav_state_source', output='screen',
              arguments=['--host', LaunchConfiguration('host'), '--vehicle', LaunchConfiguration('vehicle')]),
+        Node(package='uav_waypoint_mission', executable='uav_mission_controller', output='screen',
+             arguments=['--host', LaunchConfiguration('host'), '--vehicle', LaunchConfiguration('vehicle'),
+                        '--mission', LaunchConfiguration('mission'), '--autostart', LaunchConfiguration('autostart')]),
     ])

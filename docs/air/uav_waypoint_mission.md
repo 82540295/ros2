@@ -67,6 +67,33 @@ ros2 topic echo /uav/odometry --once
 
 坐标换算（NED↔ENU、FRD↔FLU）为纯函数，见 `waypoint/coords.py`，离线单元测试覆盖 yaw 0°/90° 速度转换、下降速度符号等场景。
 
+## 任务执行：任务控制节点
+
+`uav_mission_controller` 订阅 `/uav/odometry`，以 10 Hz 驱动状态机并向 AirSim 下发 `moveOnPositionAsync` 指令；落地后自动收桨，任务失败时停止指令并原地保持。
+
+| 接口 | 类型 | 说明 |
+|---|---|---|
+| `/uav/mission/arm` | `std_srvs/Trigger` | 解锁（IDLE → ARMED） |
+| `/uav/mission/go` | `std_srvs/Trigger` | 启动任务（ARMED → TAKING_OFF） |
+| `/uav/mission/abort` | `std_srvs/Trigger` | 急停：从当前位置垂直降落 |
+| `/uav/mission_status` | `std_msgs/String` | JSON：state / 当前航点索引 / 目标点（ENU） |
+
+手动启动任务：
+
+```bash
+# python3 main.py live --host <IP> 启动后，另开终端：
+ros2 service call /uav/mission/arm std_srvs/srv/Trigger
+ros2 service call /uav/mission/go std_srvs/srv/Trigger
+# 观察任务进度（state 依次出现 taking_off / waypoint / landing / landed）：
+ros2 topic echo /uav/mission_status
+```
+
+无人值守（启动 3 秒后自动解锁起飞）：
+
+```bash
+python3 main.py live --host <IP> --autostart
+```
+
 ## 航点配置
 
 `config/mission.yaml` 中所有位置为 **ENU 坐标**（x 东、y 北、z 上，单位米），相对无人机起飞点（仿真器出生点）。默认航线：
@@ -99,7 +126,7 @@ IDLE --arm()--> ARMED --go()--> TAKING_OFF --到达悬停高度--> WAYPOINT(wp1.
 
 ## 验证（当前提交）
 
-离线单元测试共 15 个，全部通过：
+离线单元测试共 20 个，全部通过：
 
 | 测试 | 验证点 |
 |---|---|
@@ -111,6 +138,7 @@ IDLE --arm()--> ARMED --go()--> TAKING_OFF --到达悬停高度--> WAYPOINT(wp1.
 | test_waypoint_timeout_fails | 航点超时 → FAILED 且指令为停止 |
 | test_abort_lands_vertically | 急停 → 从当前位置垂直降落 → LANDED |
 | test_coords（5 个） | NED↔ENU 点位换算与往返、yaw 0°/90° 速度转换、下降速度符号、角速度符号翻转、姿态四元数归一 |
+| test_planner（5 个） | 起飞/航点/降落指令的 ENU→NED 换算、hold/stop 映射、全链路动作序列（全 move 结束于 hold） |
 
 在线仿真验证（起飞/飞航点/降落的窗口截图与动图）在后续提交补齐。
 
