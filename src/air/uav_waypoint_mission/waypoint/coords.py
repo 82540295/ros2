@@ -36,8 +36,8 @@ def enu_flu_orientation(q_ned):
     return quat_product(quat_product([0, 2 ** -0.5, 2 ** -0.5, 0], q_ned), [0, 1, 0, 0])
 
 
-def _dcm_from_quat(q):
-    """Direction-cosine matrix (FRD -> NED) from a quaternion (w, x, y, z)."""
+def dcm_from_quat(q):
+    """Body -> world direction-cosine matrix from a quaternion (w, x, y, z)."""
     w, x, y, z = q
     return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
                      [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
@@ -46,7 +46,12 @@ def _dcm_from_quat(q):
 
 def ned_velocity_to_flu(v_ned, q_ned):
     """Body velocity in NED-FRD -> body velocity in ENU-FLU (linear)."""
-    return (_dcm_from_quat(q_ned).T @ np.asarray(v_ned, dtype=float)) * np.array([1, -1, -1])
+    return (dcm_from_quat(q_ned).T @ np.asarray(v_ned, dtype=float)) * np.array([1, -1, -1])
+
+
+def body_velocity_to_world_ned(v_flu, q_enu_flu):
+    """Body-frame FLU velocity -> world NED velocity (for moveByVelocityAsync)."""
+    return enu_to_ned(tuple(dcm_from_quat(q_enu_flu) @ np.asarray(v_flu, dtype=float)))
 
 
 def ned_angular_to_flu(w_ned):

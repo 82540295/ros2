@@ -10,6 +10,7 @@
 - ROS 2 Humble `ament_python` 功能包，`ros2 launch uav_waypoint_mission main.launch.py` 启动
 - **状态发布节点** `uav_state_source`：连接仿真器 RPC 41451（启动 ping 自检，连不上立即报错），10 Hz 发布 ENU 里程计
 - **任务控制节点** `uav_mission_controller`：状态机驱动 `moveOnPositionAsync`，`arm/go/abort` 三个服务，落地自动收桨，`autostart` 支持无人值守
+- **键盘遥控节点** `uav_teleop`：WASD/QE 发车体系速度到 `/uav/cmd_vel`（遥控期间任务自动暂停、松手恢复），F 急停降落，R 立即释放
 
 ## 目录结构
 
@@ -63,9 +64,10 @@ ros2 service call /uav/mission/go std_srvs/srv/Trigger
 ros2 topic echo /uav/mission_status
 # 也可无人值守（启动 3 秒后自动解锁起飞）：
 python3 main.py live --host 192.168.122.1 --autostart
-```
 
-> 键盘遥控节点在后续提交中陆续加入。
+# 5. 键盘遥控（需要 tty 的终端，已 source ROS 2；WASD/QE 运动、F 急停降落、R 释放恢复任务、Esc 退出）
+ros2 run uav_waypoint_mission uav_teleop
+```
 
 ## 飞行逻辑（状态机）
 
@@ -82,5 +84,5 @@ IDLE --arm()--> ARMED --go()--> TAKING_OFF --到达悬停高度--> WAYPOINT(wp1.
 
 - [x] AirSim 状态发布节点：连接 41451，发布 `/uav/odometry`、`/uav/state`（提交 2）
 - [x] 任务控制节点：状态机 + `moveOnPositionAsync` 驱动仿真器（提交 3）
-- [ ] 键盘遥控节点：WASD/QE/RF，任务暂停/恢复（提交 4）
+- [x] 键盘遥控节点：WASD/QE/RF，任务暂停/恢复（提交 4）
 - [ ] 文档完善与仿真演示（提交 5）

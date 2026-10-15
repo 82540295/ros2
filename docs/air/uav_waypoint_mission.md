@@ -94,6 +94,28 @@ ros2 topic echo /uav/mission_status
 python3 main.py live --host <IP> --autostart
 ```
 
+## 键盘遥控
+
+`uav_teleop` 节点独立运行（需要 tty），以 10 Hz 向 `/uav/cmd_vel` 发布**车体系（FLU）**线速度：
+
+| 按键 | 动作 |
+|---|---|
+| W/S | 前进 / 后退 |
+| A/D | 左移 / 右移 |
+| Q/E | 下降 / 上升 |
+| F | 急停：从当前位置垂直降落（调用 `/uav/mission/abort`） |
+| R | 立即释放手动控制（发布零 Twist，任务马上恢复） |
+| Esc | 退出 |
+
+按住运动键时任务控制器自动进入**手动模式**（状态机冻结、超时不累计），执行 `moveByVelocityAsync` 速度控制；松手后 1.5 秒自动恢复任务执行（按 R 立即恢复）。
+
+```bash
+# 另开终端（已 source ROS 2）：
+ros2 run uav_waypoint_mission uav_teleop
+# 观察手动/任务模式切换：
+ros2 topic echo /uav/mission_status
+```
+
 ## 航点配置
 
 `config/mission.yaml` 中所有位置为 **ENU 坐标**（x 东、y 北、z 上，单位米），相对无人机起飞点（仿真器出生点）。默认航线：
@@ -126,7 +148,7 @@ IDLE --arm()--> ARMED --go()--> TAKING_OFF --到达悬停高度--> WAYPOINT(wp1.
 
 ## 验证（当前提交）
 
-离线单元测试共 20 个，全部通过：
+离线单元测试共 27 个，全部通过：
 
 | 测试 | 验证点 |
 |---|---|
@@ -139,6 +161,7 @@ IDLE --arm()--> ARMED --go()--> TAKING_OFF --到达悬停高度--> WAYPOINT(wp1.
 | test_abort_lands_vertically | 急停 → 从当前位置垂直降落 → LANDED |
 | test_coords（5 个） | NED↔ENU 点位换算与往返、yaw 0°/90° 速度转换、下降速度符号、角速度符号翻转、姿态四元数归一 |
 | test_planner（5 个） | 起飞/航点/降落指令的 ENU→NED 换算、hold/stop 映射、全链路动作序列（全 move 结束于 hold） |
+| test_teleop（7 个） | FLU→世界 NED 速度换算（yaw 0°/90°、上升）、手动窗口判定（无指令/新鲜/过期）、零 Twist 释放标记 |
 
 在线仿真验证（起飞/飞航点/降落的窗口截图与动图）在后续提交补齐。
 

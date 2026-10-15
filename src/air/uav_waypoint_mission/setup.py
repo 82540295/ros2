@@ -10,4 +10,5 @@ setup(name='uav_waypoint_mission', version='0.1.0', packages=['waypoint'],
     description='Drone waypoint mission flight on AirSim/CarlaAir with ROS 2 Humble',
     maintainer='825404295', maintainer_email='825404295@qq.com', license='Apache-2.0',
     entry_points={'console_scripts': ['uav_state_source=waypoint.ros_nodes:source_main',
-                                      'uav_mission_controller=waypoint.ros_nodes:mission_main']})
+                                      'uav_mission_controller=waypoint.ros_nodes:mission_main',
+                                      'uav_teleop=waypoint.ros_nodes:teleop_main']})

@@ -24,3 +24,16 @@ def plan_airsim_command(cmd):
 def mission_finished(state):
     """True once the mission reaches a terminal state."""
     return state in (State.LANDED, State.FAILED)
+
+
+MANUAL_TIMEOUT_S = 1.5
+
+
+def manual_active(now, last_cmd_t, timeout_s=MANUAL_TIMEOUT_S):
+    """True while a /uav/cmd_vel message arrived within the freshness window."""
+    return last_cmd_t is not None and (now - last_cmd_t) < timeout_s
+
+
+def twist_is_release(x, y, z, eps=1e-6):
+    """A zero-magnitude Twist is the explicit 'release manual control' marker."""
+    return abs(x) < eps and abs(y) < eps and abs(z) < eps
