@@ -8,6 +8,7 @@
 - `config/mission.yaml` 航点定义（ENU 坐标，以起飞点为原点），改这一个文件即可改航线
 - `config/airsim_settings.json` 仿真器载具配置：WaypointDrone（SimpleFlight）+ 前视 RGB 相机 + 16 线激光雷达 + IMU
 - ROS 2 Humble `ament_python` 功能包，`ros2 launch uav_waypoint_mission main.launch.py` 启动
+- **状态发布节点** `uav_state_source`：连接仿真器 RPC 41451（启动 ping 自检，连不上立即报错），10 Hz 发布 ENU 里程计
 
 ## 目录结构
 
@@ -19,8 +20,12 @@ uav_waypoint_mission/
 │   └── airsim_settings.json  # AirSim 载具与传感器配置
 ├── launch/main.launch.py     # ros2 launch 参数：host / vehicle / mission / rviz
 ├── waypoint/
-│   └── mission.py            # 任务模型 + 确定性状态机（纯 Python）
-└── tests/test_mission.py     # 离线单元测试（不需要 ROS / 仿真器）
+│   ├── mission.py            # 任务模型 + 确定性状态机（纯 Python）
+│   ├── coords.py             # NED/ENU、FRD/FLU 坐标换算（纯 Python）
+│   └── ros_nodes.py          # ROS2 节点（状态发布）
+└── tests/
+    ├── test_mission.py       # 状态机离线单元测试（不需要 ROS / 仿真器）
+    └── test_coords.py        # 坐标换算离线单元测试
 ```
 
 ## 环境要求
@@ -45,9 +50,14 @@ python3 main.py test
 
 # 3. 构建 ROS2 功能包（需已 source ROS 2 Humble 的终端）
 python3 main.py build
+
+# 4. 连接仿真器发布状态（需仿真器已启动，且 config/airsim_settings.json 已拷到 ~/Documents/AirSim/）
+python3 main.py live --host 192.168.122.1
+# 另开终端验证：
+ros2 topic echo /uav/odometry --once
 ```
 
-> `demo` / `live` 阶段与 ROS2 节点（状态发布、任务控制、键盘遥控）在后续提交中陆续加入。
+> `demo` 阶段与任务控制 / 键盘遥控节点在后续提交中陆续加入。
 
 ## 飞行逻辑（状态机）
 
@@ -62,7 +72,7 @@ IDLE --arm()--> ARMED --go()--> TAKING_OFF --到达悬停高度--> WAYPOINT(wp1.
 
 ## 后续计划（本系列提交）
 
-- [ ] AirSim 状态发布节点：连接 41451，发布 `/uav/odometry`、`/uav/state`（提交 2）
+- [x] AirSim 状态发布节点：连接 41451，发布 `/uav/odometry`、`/uav/state`（提交 2）
 - [ ] 任务控制节点：状态机 + `moveOnPositionAsync` 驱动仿真器（提交 3）
 - [ ] 键盘遥控节点：WASD/QE/RF，任务暂停/恢复（提交 4）
 - [ ] 文档完善与仿真演示（提交 5）

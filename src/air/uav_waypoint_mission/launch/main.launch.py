@@ -1,7 +1,8 @@
 from pathlib import Path
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, LogInfo
+from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 
@@ -16,8 +17,7 @@ def generate_launch_description():
             description='Absolute path of the waypoint mission YAML file'),
         DeclareLaunchArgument('rviz', default_value='false',
             description='Start RViz2 with the mission view (true/false)'),
-        # The simulator-facing nodes (state source / mission controller / teleop)
-        # are added in later commits of this module.
-        LogInfo(msg=['[uav_waypoint_mission] skeleton ready: host=', LaunchConfiguration('host'),
-                     ' vehicle=', LaunchConfiguration('vehicle')]),
+        # The mission controller and teleop nodes are added in later commits.
+        Node(package='uav_waypoint_mission', executable='uav_state_source', output='screen',
+             arguments=['--host', LaunchConfiguration('host'), '--vehicle', LaunchConfiguration('vehicle')]),
     ])

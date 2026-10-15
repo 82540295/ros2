@@ -35,10 +35,37 @@ python3 main.py build
 预期测试输出：
 
 ```
-Ran 7 tests in 0.001s
+Ran 15 tests in 0.006s
 
 OK
 ```
+
+## 在线运行：状态发布节点
+
+`uav_state_source` 节点通过 AirSim RPC（端口 41451）连接仿真器，**启动时执行 ping 自检**（连不上会立即抛错退出），之后以 10 Hz 发布车辆状态：
+
+| 话题 | 类型 | 说明 |
+|---|---|---|
+| `/uav/odometry` | `nav_msgs/Odometry` | ENU map 坐标系、FLU 车体坐标系的位置/姿态/速度 |
+| `/uav/state` | `std_msgs/String` | 版本化 JSON（schema_version=1，NED/FRD 原始值） |
+
+前置准备（一次性）：
+
+1. 把载具配置拷入仿真器：`cp config/airsim_settings.json ~/Documents/AirSim/settings.json`
+2. 启动 CarlaAir：`./CarlaUE4.sh /Game/Carla/Maps/Town01 -quality-Low`，等到日志出现 `Ready! Both servers are running.`
+
+启动节点并验证：
+
+```bash
+python3 main.py live --host <仿真器所在机器IP>
+# 预期日志：state source connected to <host> (vehicle WaypointDrone)
+
+# 另开终端（已 source ROS 2）：
+ros2 topic hz /uav/odometry
+ros2 topic echo /uav/odometry --once
+```
+
+坐标换算（NED↔ENU、FRD↔FLU）为纯函数，见 `waypoint/coords.py`，离线单元测试覆盖 yaw 0°/90° 速度转换、下降速度符号等场景。
 
 ## 航点配置
 
@@ -72,7 +99,7 @@ IDLE --arm()--> ARMED --go()--> TAKING_OFF --到达悬停高度--> WAYPOINT(wp1.
 
 ## 验证（当前提交）
 
-离线单元测试覆盖 5 类场景，全部通过：
+离线单元测试共 15 个，全部通过：
 
 | 测试 | 验证点 |
 |---|---|
@@ -83,6 +110,7 @@ IDLE --arm()--> ARMED --go()--> TAKING_OFF --到达悬停高度--> WAYPOINT(wp1.
 | test_takeoff_command_targets_home_altitude | 起飞指令目标 = 原点 + 悬停高度 |
 | test_waypoint_timeout_fails | 航点超时 → FAILED 且指令为停止 |
 | test_abort_lands_vertically | 急停 → 从当前位置垂直降落 → LANDED |
+| test_coords（5 个） | NED↔ENU 点位换算与往返、yaw 0°/90° 速度转换、下降速度符号、角速度符号翻转、姿态四元数归一 |
 
 在线仿真验证（起飞/飞航点/降落的窗口截图与动图）在后续提交补齐。
 
