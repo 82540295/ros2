@@ -37,21 +37,24 @@ class AEBParams:
 def decode_carla_depth(raw, width, height):
     """把 CARLA sensor.camera.depth 的原始字节流解码为 (H, W) float 深度图（米）。
 
-    CARLA 将深度编码为 16 位整数（精度 1/256 米）拆进两个通道：
-    R = 高字节，G = 低字节，B = 0。
+    CARLA 相机原始数据按 BGRA 打包（H, W, 4）。深度编码为 16 位整数
+    （精度 1/256 米，量程 ~256 m）：红通道（缓冲第 3 字节）= 高字节，
+    绿色通道（缓冲第 2 字节）= 低字节。
     """
-    buf = np.frombuffer(raw, dtype=np.uint8).reshape(height, width, 3)
-    return (buf[:, :, 0].astype(np.float32) * 256.0
-            + buf[:, :, 1].astype(np.float32)) / 256.0
+    buf = np.frombuffer(raw, dtype=np.uint8).reshape(height, width, 4)
+    r = buf[:, :, 2].astype(np.float32)   # 红 = 高字节
+    g = buf[:, :, 1].astype(np.float32)   # 绿 = 低字节
+    return (r * 256.0 + g) / 256.0
 
 
 def encode_carla_depth(depth):
-    """decode_carla_depth 的逆操作（测试与演示用）：米 → 原始字节流。"""
+    """decode_carla_depth 的逆操作（测试与演示用）：米 → BGRA 原始字节流。"""
     d = np.clip(np.asarray(depth, dtype=np.float32), 0.0, 65535.0 / 256.0)
     v = np.round(d * 256.0).astype(np.uint16)
-    out = np.zeros((depth.shape[0], depth.shape[1], 3), dtype=np.uint8)
-    out[:, :, 0] = (v >> 8).astype(np.uint8)
-    out[:, :, 1] = (v & 0xFF).astype(np.uint8)
+    out = np.zeros((depth.shape[0], depth.shape[1], 4), dtype=np.uint8)
+    out[:, :, 2] = (v >> 8).astype(np.uint8)   # 红 = 高字节
+    out[:, :, 1] = (v & 0xFF).astype(np.uint8)  # 绿 = 低字节
+    out[:, :, 3] = 255                          # A
     return out.tobytes()
 
 
@@ -70,6 +73,15 @@ def depth_min_distance(depth, row0=0.30, row1=0.85, col0=0.20, col1=0.80,
     if band.size == 0:
         return float(valid_max)
     return float(band.min())
+
+
+def frame_min_distance(raw, width, height, valid_min=0.3, valid_max=80.0):
+    """一帧深度相机原始数据 → 中央前向区域最小有效距离（米）。
+
+    桥接节点每帧调用；纯函数，便于离线单测。
+    """
+    depth = decode_carla_depth(raw, width, height)
+    return depth_min_distance(depth, valid_min=valid_min, valid_max=valid_max)
 
 
 def aeb_decide(state, d, closing, p=None):

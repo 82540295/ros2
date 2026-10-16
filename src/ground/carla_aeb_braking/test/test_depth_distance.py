@@ -33,7 +33,17 @@ class TestDepthDecode(unittest.TestCase):
 
     def test_raw_size(self):
         raw = encode_carla_depth(np.zeros((H, W), dtype=np.float32))
-        self.assertEqual(len(raw), H * W * 3)
+        self.assertEqual(len(raw), H * W * 4)  # CARLA 相机原始数据为 BGRA
+
+    def test_frame_min_distance(self):
+        from carla_aeb_braking.aeb_core import frame_min_distance
+        depth = np.full((H, W), 100.0, dtype=np.float32)
+        depth[H // 2, W // 2] = 6.0
+        raw = encode_carla_depth(depth)
+        self.assertAlmostEqual(frame_min_distance(raw, W, H), 6.0)
+        # 全空帧 → valid_max
+        empty = encode_carla_depth(np.full((H, W), 100.0, dtype=np.float32))
+        self.assertEqual(frame_min_distance(empty, W, H, valid_max=80.0), 80.0)
 
 
 class TestDepthMinDistance(unittest.TestCase):

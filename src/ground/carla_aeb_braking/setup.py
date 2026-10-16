@@ -24,4 +24,9 @@ setup(
     description='CARLA 0.9.16 自动紧急制动（AEB）ROS 2 功能包',
     license='MIT',
     tests_require=['pytest'],
+    entry_points={
+        'console_scripts': [
+            'aeb_bridge_node = carla_aeb_braking.bridge_node:main',
+        ],
+    },
 )
