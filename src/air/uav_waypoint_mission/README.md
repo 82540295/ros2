@@ -49,8 +49,11 @@ cd src/air/uav_waypoint_mission
 # 1. 环境自检（Python 版本 + pyyaml）
 python3 main.py doctor
 
-# 2. 离线单元测试（状态机全链路 / 航点超时 / 急停降落 / 配置加载，不需要 ROS 与仿真器）
+# 2. 离线单元测试（状态机/坐标/指令映射/遥控逻辑/仿真 demo，共 30 个，不需要 ROS 与仿真器）
 python3 main.py test
+
+# 2.5 离线演示：仿真无人机飞完全程，打印状态时间线并渲染 3D 轨迹图（需 matplotlib）
+python3 main.py demo
 
 # 3. 构建 ROS2 功能包（需已 source ROS 2 Humble 的终端）
 python3 main.py build
@@ -85,4 +88,5 @@ IDLE --arm()--> ARMED --go()--> TAKING_OFF --到达悬停高度--> WAYPOINT(wp1.
 - [x] AirSim 状态发布节点：连接 41451，发布 `/uav/odometry`、`/uav/state`（提交 2）
 - [x] 任务控制节点：状态机 + `moveOnPositionAsync` 驱动仿真器（提交 3）
 - [x] 键盘遥控节点：WASD/QE/RF，任务暂停/恢复（提交 4）
+- [x] 离线 demo：仿真无人机飞完全程并渲染 3D 轨迹图（`python3 main.py demo`）
 - [ ] 文档完善与仿真演示（提交 5）

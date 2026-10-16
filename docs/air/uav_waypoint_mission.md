@@ -146,9 +146,27 @@ IDLE --arm()--> ARMED --go()--> TAKING_OFF --到达悬停高度--> WAYPOINT(wp1.
 - 飞行中（TAKING_OFF / WAYPOINT）随时可 `abort()`：从当前位置垂直降落
 - 与 AirSim 的 NED 坐标系换算在 ROS2 适配层完成（后续提交）
 
-## 验证（当前提交）
+## 离线演示（demo 阶段）
 
-离线单元测试共 27 个，全部通过：
+不启动仿真器也能预览完整任务：`python3 main.py demo` 用一个速度受限的质点无人机模型驱动真实状态机飞完全程，打印状态时间线并渲染 3D 轨迹图：
+
+```
+状态时间线:
+     0.0 s  armed
+     0.0 s  taking_off
+     1.4 s  waypoint
+    20.6 s  landing
+    26.0 s  landed
+最终状态: LANDED，轨迹点 521 个
+```
+
+![离线演示轨迹](./images/uav_waypoint_mission_demo.png)
+
+图中蓝色为飞行轨迹：从原点（home，绿色）起飞爬升到 3 m，依次飞越 4 个红色航点（方形航线），最后垂直下降到蓝色方块处降落。轨迹图同时保存在 `artifacts/demo_trajectory.png`。
+
+## 验证
+
+### 离线单元测试（30 个，全部通过）
 
 | 测试 | 验证点 |
 |---|---|
@@ -162,8 +180,18 @@ IDLE --arm()--> ARMED --go()--> TAKING_OFF --到达悬停高度--> WAYPOINT(wp1.
 | test_coords（5 个） | NED↔ENU 点位换算与往返、yaw 0°/90° 速度转换、下降速度符号、角速度符号翻转、姿态四元数归一 |
 | test_planner（5 个） | 起飞/航点/降落指令的 ENU→NED 换算、hold/stop 映射、全链路动作序列（全 move 结束于 hold） |
 | test_teleop（7 个） | FLU→世界 NED 速度换算（yaw 0°/90°、上升）、手动窗口判定（无指令/新鲜/过期）、零 Twist 释放标记 |
+| test_demo（3 个） | 仿真飞完仓库航线（LANDED、五状态齐全且顺序正确）、航点按序到达、落点在原点附近 |
 
-在线仿真验证（起飞/飞航点/降落的窗口截图与动图）在后续提交补齐。
+### 目标平台验证（ROS 2 Humble 虚拟机）
+
+在 Ubuntu 22.04.5 + Python 3.10.12 + ROS 2 Humble 的 KVM 虚拟机中完成：
+
+- 离线单元测试 30/30 通过（`python3 main.py test`）
+- `colcon build --packages-select uav_waypoint_mission` 构建成功，`ros2 pkg list` 可识别
+- 三个入口点 `uav_state_source` / `uav_mission_controller` / `uav_teleop` 全部安装到 install 空间
+- `ros2 launch uav_waypoint_mission main.launch.py --show-args` 参数解析正常
+
+在线仿真验证（连 41451 起飞/飞航点/降落）依赖仿真器环境，待仿真器可用后补充。
 
 ## 相关模块
 

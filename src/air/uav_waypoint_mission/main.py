@@ -5,7 +5,7 @@ Stages:
     doctor  check the local Python environment
     test    run the offline unit tests (no ROS / no simulator required)
     build   colcon-build this package inside the ros2 workspace
-    demo    (later commit) preview the mission without a simulator
+    demo    fly the mission with a simulated drone and render the trajectory
     live    start the state source + mission controller against a live AirSim/CarlaAir
 """
 import argparse
@@ -42,6 +42,27 @@ def build():
     return subprocess.call(['colcon', 'build', '--packages-select', 'uav_waypoint_mission'], cwd=str(WS))
 
 
+def demo():
+    sys.path.insert(0, str(ROOT))
+    from waypoint.demo import plot_trajectory, run_demo
+    from waypoint.mission import load_mission
+
+    mission = load_mission(ROOT / 'config' / 'mission.yaml')
+    trail, timeline, ctl = run_demo(mission)
+    print('状态时间线:')
+    for t_s, state in timeline:
+        print('  %6.1f s  %s' % (t_s, state))
+    end = 'LANDED' if ctl.state.value == 'landed' else ctl.state.value
+    print('最终状态: %s，轨迹点 %d 个' % (end, len(trail)))
+    try:
+        out = ROOT / 'artifacts' / 'demo_trajectory.png'
+        plot_trajectory(trail, mission, out)
+        print('轨迹图: %s' % out)
+    except ImportError:
+        print('（未装 matplotlib，跳过轨迹图；pip install matplotlib 后重跑可得图）')
+    return 0 if ctl.state.value == 'landed' else 1
+
+
 def live(host, autostart):
     cmd = ['ros2', 'launch', 'uav_waypoint_mission', 'main.launch.py',
            'host:=%s' % host, 'rviz:=false']
@@ -62,6 +83,8 @@ def main():
         return test()
     if a.stage == 'build':
         return build()
+    if a.stage == 'demo':
+        return demo()
     if a.stage == 'live':
         return live(a.host, a.autostart)
     print("stage '%s' is not available yet: the mission controller and teleop nodes are "
