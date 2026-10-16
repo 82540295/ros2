@@ -27,6 +27,7 @@ setup(
     entry_points={
         'console_scripts': [
             'aeb_bridge_node = carla_aeb_braking.bridge_node:main',
+            'aeb_controller_node = carla_aeb_braking.aeb_node:main',
         ],
     },
 )

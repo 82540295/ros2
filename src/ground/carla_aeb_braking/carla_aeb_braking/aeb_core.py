@@ -84,6 +84,17 @@ def frame_min_distance(raw, width, height, valid_min=0.3, valid_max=80.0):
     return depth_min_distance(depth, valid_min=valid_min, valid_max=valid_max)
 
 
+def estimate_closing(d_prev, d_now, dt, fallback=0.0):
+    """由前后两帧前向距离估计相对接近速度（m/s，>0 表示正在接近）。
+
+    首帧（d_prev 为 None）或间隔非法（dt <= 0）时返回 fallback
+    （调用方可传自车速度作为静止障碍物的近似）。
+    """
+    if d_prev is None or dt <= 0.0:
+        return float(fallback)
+    return (d_prev - d_now) / dt
+
+
 def aeb_decide(state, d, closing, p=None):
     """AEB 状态机单步决策。
 
@@ -143,3 +154,13 @@ class AEBController:
         if event is not None:
             self.events.append((t, event))
         return self.state, throttle, brake, event
+
+    def abort(self):
+        """紧急中止：立即回到 cruise 并释放制动（障碍仍近时下一 tick 会重新预警）。"""
+        self.state = CRUISE
+
+    def reset(self):
+        """复位状态机与历史记录。"""
+        self.state = CRUISE
+        self.history.clear()
+        self.events.clear()
