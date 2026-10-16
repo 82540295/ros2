@@ -28,7 +28,8 @@ class AEBParams:
     brake_exit: float = 12.0     # 退出紧急制动：前方距离高于此值（滞回）
     close_min: float = 0.5       # 判定“正在接近”的最小相对接近速度
     cruise_throttle: float = 0.55
-    warn_brake: float = 0.35     # 预警时的部分制动
+    warn_brake: float = 0.15     # 预警时的温和预制动（过强会把接近速度拖垮，
+                                  # 导致 d 到达 brake_enter 时已不满足“正在接近”）
     brake_max: float = 1.0       # 全力制动
     valid_min: float = 0.3       # 深度有效下限（滤掉车身自身）
     valid_max: float = 80.0      # 深度有效上限（超过视为无障碍）

@@ -64,8 +64,10 @@ def build():
 
 
 def demo(args):
-    print("demo 阶段在提交 4 提供（离线制动曲线 / --live 连 CARLA）")
-    return 1
+    from carla_aeb_braking import demo as demo_mod
+    if args.live:
+        return demo_mod.run_live(host=args.host, port=args.port)
+    return demo_mod.run_offline()
 
 
 def live(host):
@@ -76,7 +78,11 @@ def live(host):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("stage", choices=["doctor", "test", "build", "demo", "live"])
-    ap.add_argument("--host", default="127.0.0.1", help="live 阶段的 CARLA 服务器地址")
+    ap.add_argument("--host", default="127.0.0.1",
+                    help="demo --live / live 阶段的 CARLA 服务器地址")
+    ap.add_argument("--port", type=int, default=2000, help="CARLA 端口")
+    ap.add_argument("--live", action="store_true",
+                    help="demo 阶段：连接 CARLA 跑真实场景（默认离线仿真）")
     a = ap.parse_args(argv)
     if a.stage == "doctor":
         return doctor()
