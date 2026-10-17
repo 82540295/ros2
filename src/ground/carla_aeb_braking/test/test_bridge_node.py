@@ -51,7 +51,7 @@ class TestBridgeNodeSourceGuards(unittest.TestCase):
     def test_publishes_obstacle_distance(self):
         src = _node_source()
         self.assertIn('"/aeb/obstacle_distance"', src)
-        self.assertIn("frame_min_distance", src)
+        self.assertIn("lidar_obstacle_distance", src)
 
     def test_subscribes_control_and_applies(self):
         src = _node_source()
@@ -63,10 +63,10 @@ class TestBridgeNodeSourceGuards(unittest.TestCase):
         src = _node_source()
         self.assertIn("cc.restore_async(self.world)", src)
 
-    def test_depth_frame_is_copied(self):
+    def test_lidar_frame_is_copied(self):
         # CARLA 复用 raw_data 底层缓冲，必须 bytes() 复制，否则下一帧覆盖
         src = _node_source()
-        self.assertIn("bytes(img.raw_data)", src)
+        self.assertIn("bytes(pc.raw_data)", src)
 
 
 if __name__ == "__main__":

@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""CARLA ↔ ROS 2 桥接节点：生成自车 + 前向深度相机。
+"""CARLA ↔ ROS 2 桥接节点：生成自车 + 前向 LiDAR。
 
 职责：
-  * 连接 CARLA、生成自车与前向深度相机（同步模式 20 Hz 步进）
-  * 每 tick：深度帧 → /aeb/obstacle_distance；车速/位姿 → /aeb/ego_speed、/aeb/odometry
+  * 连接 CARLA、生成自车与前向 LiDAR（同步模式 20 Hz 步进）
+  * 每 tick：点云 → /aeb/obstacle_distance；车速/位姿 → /aeb/ego_speed、/aeb/odometry
   * 订阅 /aeb/control（[throttle, steer, brake]）并施加到车辆
   * 退出时销毁传感器/自车，并把世界恢复为异步模式
+
+测距说明：AEB 障碍距离用前向 LiDAR + 高度带滤波 + 距离直方图聚类
+（aeb_core.lidar_obstacle_distance），而非深度相机取行带最小值——
+后者实测会被自车车身近距回波与前向地面主导，无法稳健区分远障碍。
 
 话题：
   发布  /aeb/obstacle_distance  (std_msgs/Float32, 米；无障碍时为 valid_max)
@@ -19,7 +23,9 @@
 import math
 import os
 import sys
+from collections import deque
 
+import numpy as np
 import rclpy
 from geometry_msgs.msg import Quaternion
 from nav_msgs.msg import Odometry
@@ -32,11 +38,14 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 from carla_aeb_braking import carla_common as cc            # noqa: E402
-from carla_aeb_braking.aeb_core import frame_min_distance   # noqa: E402
+from carla_aeb_braking.aeb_core import (                    # noqa: E402
+    lidar_obstacle_distance,
+    parse_lidar_points,
+)
 
 
 class AEBBridgeNode(Node):
-    """CARLA 桥接节点：传感器 → 话题，控制话题 → 车辆。"""
+    """CARLA 桥接节点：LiDAR 测距 → 话题，控制话题 → 车辆。"""
 
     def __init__(self):
         super().__init__("aeb_bridge_node")
@@ -46,21 +55,19 @@ class AEBBridgeNode(Node):
         self.declare_parameter("port", cc.DEFAULT_PORT)
         self.declare_parameter("town", cc.DEFAULT_MAP)
         self.declare_parameter("ego_blueprint", cc.EGO_BLUEPRINT)
-        self.declare_parameter("depth_width", 640)
-        self.declare_parameter("depth_height", 360)
-        self.declare_parameter("depth_fov", 90)
-        self.declare_parameter("valid_min", 0.3)
-        self.declare_parameter("valid_max", 80.0)
+        self.declare_parameter("lidar_z", 2.0)          # LiDAR 安装高度（m，车顶）
+        self.declare_parameter("lidar_x_min", 3.0)      # 最近有效距离（滤自车车身回波）
+        self.declare_parameter("lidar_min_points", 6)   # 聚类最小点数（抗孤立杂波）
+        self.declare_parameter("valid_max", 80.0)       # 无障碍时的哨兵距离
         self.declare_parameter("fixed_update", cc.DT)
 
         host = self.get_parameter("host").value
         port = int(self.get_parameter("port").value)
         town = self.get_parameter("town").value
         blueprint = self.get_parameter("ego_blueprint").value
-        self.depth_width = int(self.get_parameter("depth_width").value)
-        self.depth_height = int(self.get_parameter("depth_height").value)
-        self.depth_fov = int(self.get_parameter("depth_fov").value)
-        self.valid_min = float(self.get_parameter("valid_min").value)
+        self.lidar_z = float(self.get_parameter("lidar_z").value)
+        self.lidar_x_min = float(self.get_parameter("lidar_x_min").value)
+        self.lidar_min_points = int(self.get_parameter("lidar_min_points").value)
         self.valid_max = float(self.get_parameter("valid_max").value)
         dt = float(self.get_parameter("fixed_update").value)
 
@@ -71,7 +78,7 @@ class AEBBridgeNode(Node):
         self.create_subscription(Float32MultiArray, "/aeb/control", self._on_control, 10)
 
         # ---------------- CARLA ----------------
-        self._depth = None          # (raw_bytes, width, height)
+        self._pts_buf = deque(maxlen=8)   # 点云时间融合缓冲（最近 8 帧）
         self._control = (0.0, 0.0, 0.0)
         self.client = None
         self.world = None
@@ -84,25 +91,25 @@ class AEBBridgeNode(Node):
     def _connect(self, host, port, town, blueprint):
         try:
             self.client, self.world = cc.connect(host, port, town)
+            cc.cleanup_actors(self.world)
             self.vehicle, tf = cc.spawn_vehicle(self.world, blueprint)
         except Exception as exc:  # noqa: BLE001
             self.get_logger().error(f"连接 CARLA 失败：{exc}")
             self.get_logger().error(
                 "请先启动 CARLA 服务端（端口 2000）；跨机器时 host:=<CARLA 所在机器 IP>")
             return
-        self.sensor = cc.make_depth_camera(
+        self.sensor = cc.make_lidar(
             self.world, self.vehicle,
-            lambda img: self._on_depth(img),
-            width=self.depth_width, height=self.depth_height,
-            fov=self.depth_fov, tick=True)
+            lambda pc: self._on_lidar(pc),
+            z=self.lidar_z, tick=True)
         self.get_logger().info(
             f"自车已生成于 ({tf.location.x:.1f}, {tf.location.y:.1f}, {tf.location.z:.1f})，"
-            f"深度相机 {self.depth_width}x{self.depth_height} 就绪")
+            f"前向 LiDAR（z={self.lidar_z:g}m）就绪")
 
     # ------------------------------------------------------------------ 回调
-    def _on_depth(self, img):
-        # bytes() 复制缓冲：CARLA 会复用 raw_data 底层内存
-        self._depth = (bytes(img.raw_data), img.width, img.height)
+    def _on_lidar(self, pc):
+        # 复制点云：CARLA 会复用 raw_data 底层内存
+        self._pts_buf.append(parse_lidar_points(bytes(pc.raw_data)))
 
     def _on_control(self, msg):
         d = list(msg.data)
@@ -113,11 +120,10 @@ class AEBBridgeNode(Node):
     def _on_timer(self):
         if self.world is None or self.vehicle is None:
             return
-        if self._depth is not None:
-            raw, w, h = self._depth
-            dist = frame_min_distance(raw, w, h,
-                                      valid_min=self.valid_min,
-                                      valid_max=self.valid_max)
+        if self._pts_buf:
+            dist = lidar_obstacle_distance(
+                np.vstack(self._pts_buf), x_min=self.lidar_x_min,
+                valid_max=self.valid_max, min_points=self.lidar_min_points)
             self.pub_distance.publish(Float32(data=float(dist)))
         speed = cc.get_speed(self.vehicle)
         self.pub_speed.publish(Float32(data=float(speed)))

@@ -2,7 +2,12 @@
 
 纯离线逻辑，只依赖 numpy，不依赖 ROS / CARLA，可完整单元测试：
 
-1. 深度图 → 前方障碍物距离（decode_carla_depth / depth_min_distance）
+1. 障碍测距
+   * LiDAR 点云 → 障碍距离（parse_lidar_points / lidar_obstacle_distance）：
+     高度带滤波 + 距离直方图聚类，稳健区分障碍车与地面/自车杂波（AEB 主测距）。
+   * 深度图 → 前方距离（decode_carla_depth / depth_min_distance）：
+     保留为深度相机工具。实测前向取“行带最小值”会被自车车身近距回波与
+     前向地面主导，无法稳健区分远障碍，故不用于 AEB 主测距。
 2. AEB 状态机（aeb_decide / AEBController）：
    cruise → warning → braking → recover，每个状态都有进入/退出
    滞回阈值，避免临界抖动。
@@ -83,6 +88,51 @@ def frame_min_distance(raw, width, height, valid_min=0.3, valid_max=80.0):
     """
     depth = decode_carla_depth(raw, width, height)
     return depth_min_distance(depth, valid_min=valid_min, valid_max=valid_max)
+
+
+def parse_lidar_points(raw):
+    """carla.LidarMeasurement.raw_data → (N,4) float32 点云（x 前、y 左、z 上）。"""
+    return np.frombuffer(raw, dtype=np.float32).reshape(-1, 4)
+
+
+def lidar_obstacle_distance(points, x_min=3.0, x_max=100.0, z_min=-1.7, z_max=-0.4,
+                            y_max=2.0, bin_width=1.0, min_points=6, valid_max=80.0):
+    """前向 LiDAR 点云 → 前向车道内障碍车距离（米）。
+
+    points: (N,4) 传感器系点云（x 前、y 左、z 上）。
+
+    思路（前向车道 + 车身高度带 + 距离直方图聚类）：
+      * |y| < y_max：只保留自车正前方车道内的点。取 2.0m（而非更宽）是为
+        滤掉车道边缘路缘——实测 Town01 路缘在 y≈2.4~2.5、世界高 ~0.1m，
+        自车加速下俯时其 z 会抬高进入高度带被误判为近距障碍；
+      * z ∈ [z_min, z_max]：只保留障碍车车身高度带（传感器 z≈-1.7~-0.4，
+        即世界高度约 0.3~1.6m），同时滤掉两类杂波——
+          - 地面：平地世界 z=0，传感器 z≈-安装高度≈-2.0，低于 z_min；
+          - 路侧标志/立柱：世界高约 2m，传感器 z≈0，高于 z_max。
+        实测 Town01 车道内 9~13m 处即有此类 2m 标志，不滤会误触发制动；
+      * x ∈ [x_min, x_max]：滤掉自车车身近距回波，限定探测范围；
+      * 对剩余点按 x 分箱计数，取“点数 ≥ min_points 的最近一箱”作为障碍距离。
+        前向车道内的障碍车身是连续表面（同距离点数多），杂波是孤立点，
+        据此稳健区分，避免裸取最小值被近距杂波主导。
+
+    无障碍时返回 valid_max。
+    """
+    pts = np.asarray(points, dtype=np.float32)
+    if pts.size == 0:
+        return float(valid_max)
+    mask = ((pts[:, 0] >= x_min) & (pts[:, 0] < x_max)
+            & (np.abs(pts[:, 1]) < y_max)
+            & (pts[:, 2] >= z_min) & (pts[:, 2] <= z_max))
+    xs = pts[mask, 0]
+    if xs.size == 0:
+        return float(valid_max)
+    bins = np.floor(xs / bin_width).astype(int)
+    counts = np.bincount(bins)
+    good = np.flatnonzero(counts >= min_points)
+    if good.size == 0:
+        return float(valid_max)
+    nearest = int(good.min())
+    return float(nearest * bin_width + bin_width * 0.5)
 
 
 def estimate_closing(d_prev, d_now, dt, fallback=0.0):

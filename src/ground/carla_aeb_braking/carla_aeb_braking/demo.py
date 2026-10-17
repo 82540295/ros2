@@ -82,7 +82,7 @@ def _write_csv(rows, path, fields):
         w.writerows(rows)
 
 
-def plot_curve(history, meta, out_png, title="AEB 离线演示"):
+def plot_curve(history, meta, out_png, title="AEB offline demo"):
     """三行图：前向距离 / 车速 / 制动与状态。返回 True 表示成功。"""
     try:
         import matplotlib
@@ -101,9 +101,9 @@ def plot_curve(history, meta, out_png, title="AEB 离线演示"):
     pp = AEBParams()
 
     bt = meta["brake_time"]
-    bt_txt = f"t={bt:.1f} s" if bt is not None else "未触发"
+    bt_txt = f"t={bt:.1f} s" if bt is not None else "not triggered"
     fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
-    fig.suptitle(f"{title}（最小间隙 {meta['min_gap']:.1f} m，刹车时刻 {bt_txt}）")
+    fig.suptitle(f"{title} (min gap {meta['min_gap']:.1f} m, brake {bt_txt})")
     ax = axes[0]
     ax.plot(t, d, lw=1.5)
     ax.axhline(pp.warn_enter, color="orange", ls="--", lw=1, label=f"warn < {pp.warn_enter:g} m")
@@ -148,55 +148,143 @@ def run_offline(out_dir=ARTIFACTS):
     return 0
 
 
-def run_live(host="127.0.0.1", port=2000, out_dir=ARTIFACTS):
-    """真实 CARLA 演示：生成自车 + 前向障碍车，AEB 触发后截图并导出数据。"""
+def _pick_clean_spawn(world, max_spawns=15, ticks=10):
+    """扫描出生点，返回 (出生点变换, 前向车道干净距离)。
+
+    逐点挂前向 LiDAR 采 8 帧融合点云，取“车身高度带 + 前向车道内最近簇”
+    的距离作为车道干净距离，选最远者——保证障碍车放得下且不会被车道内
+    的路侧设施（标志/立柱）抢先触发。
+    """
+    import numpy as np
+    import carla
+    from carla_aeb_braking.aeb_core import parse_lidar_points
+
+    sps = world.get_map().get_spawn_points()[:max_spawns]
+    bp = world.get_blueprint_library().find("vehicle.tesla.model3")
+    best = None
+    for sp in sps:
+        ego = world.try_spawn_actor(bp, sp)
+        if ego is None:
+            continue
+        lb = world.get_blueprint_library().find("sensor.lidar.ray_cast")
+        lb.set_attribute("channels", "64")
+        lb.set_attribute("points_per_second", "240000")
+        lb.set_attribute("range", "100")
+        lb.set_attribute("rotation_frequency", "20")
+        lb.set_attribute("upper_fov", "15")
+        lb.set_attribute("lower_fov", "-25")
+        buf = []
+
+        def _cb(pc, _buf=buf):
+            _buf.append(parse_lidar_points(bytes(pc.raw_data)))
+            if len(_buf) > 8:
+                _buf.pop(0)
+
+        lidar = world.spawn_actor(
+            lb, carla.Transform(carla.Location(z=2.0)), attach_to=ego)
+        lidar.listen(_cb)
+        for _ in range(ticks):
+            world.tick()
+        if buf:
+            p = np.vstack(buf)
+            lane = ((np.abs(p[:, 1]) < 2.0) & (p[:, 2] >= -1.7)
+                    & (p[:, 2] <= -0.4) & (p[:, 0] > 3) & (p[:, 0] < 100))
+            lp = p[lane]
+            if len(lp):
+                bx = np.floor(lp[:, 0]).astype(int)
+                counts = np.bincount(bx)
+                good = np.flatnonzero(counts >= 6)
+                nearest = float(good.min()) if len(good) else 100.0
+            else:
+                nearest = 100.0
+        else:
+            nearest = 0.0
+        for a in (lidar, ego):
+            try:
+                a.destroy()
+            except Exception:  # noqa: BLE001
+                pass
+        if best is None or nearest > best[1]:
+            best = (sp, nearest)
+    if best is None:
+        raise RuntimeError("没有可用的出生点")
+    return best[0], best[1]
+
+
+def run_live(host="127.0.0.1", port=2000, out_dir=ARTIFACTS, gap=50.0):
+    """真实 CARLA 演示：生成自车 + 前向障碍车，AEB 触发后截图并导出数据。
+
+    gap: 障碍车初始距离（m）。自车从静止起步，需要足够加速段才能以巡航
+    速度冲入全力制动区（d<7m）。实际取 min(gap, 车道干净距离-3m)：
+    扫描选出前向车道最干净的出生点，障碍车放在车道干净范围内，
+    保证它一定是 AEB 的制动目标（不会被路侧设施抢先）。
+    """
     from carla_aeb_braking import carla_common as cc
-    from carla_aeb_braking.aeb_core import AEBController, frame_min_distance
+    from carla_aeb_braking.aeb_core import (AEBController, lidar_obstacle_distance,
+                                            parse_lidar_points)
+    import numpy as np
     import carla
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"[demo] 连接 CARLA {host}:{port} ...")
     client, world = cc.connect(host, port)
-    ego, tf = cc.spawn_vehicle(world)
-    depth = {"f": None}
-    cam = cc.make_depth_camera(
-        world, ego,
-        lambda img: depth.__setitem__("f", (bytes(img.raw_data), img.width, img.height)),
-        tick=True)
-    print(f"[demo] 自车已生成于 ({tf.location.x:.1f}, {tf.location.y:.1f})")
+    cc.cleanup_actors(world)
+    # 扫描出生点，选前向车道最干净的（放得下障碍车并留加速段）
+    spawn_tf, clean_range = _pick_clean_spawn(world)
+    gap = min(gap, max(clean_range - 3.0, 15.0))
+    ego, tf = cc.spawn_vehicle(world, transform=spawn_tf)
+    print(f"[demo] 选定出生点 ({spawn_tf.location.x:.1f}, {spawn_tf.location.y:.1f})，"
+          f"前向车道 {clean_range:.0f}m 无障碍，障碍车距离 {gap:.0f}m")
+    buf = []
 
-    # 在自车前方约 35 m 的同一车道生成静止障碍车
-    m = world.get_map()
-    wp = m.get_waypoint(tf.location)
-    if wp is None:
-        raise RuntimeError("自车出生点不在车道上，无法定位障碍车")
-    obs_wp = wp
-    for _ in range(35):
-        nxt = obs_wp.next(1.0)
-        if not nxt:
-            break
-        obs_wp = nxt[0]
-    obs_bp = world.get_blueprint_library().find("vehicle.audi.tt")
-    obstacle = world.try_spawn_actor(obs_bp, obs_wp.transform)
-    if obstacle is None:
-        raise RuntimeError("无法生成障碍车")
-    print(f"[demo] 障碍车已生成于 ({obs_wp.transform.location.x:.1f}, "
-          f"{obs_wp.transform.location.y:.1f})")
+    def _on_pts(pc):
+        buf.append(parse_lidar_points(bytes(pc.raw_data)))
+        if len(buf) > 8:
+            buf.pop(0)
+
+    lidar = cc.make_lidar(world, ego, _on_pts, tick=True)
+    print(f"[demo] 自车已生成于 ({tf.location.x:.1f}, {tf.location.y:.1f})，前向 LiDAR 就绪（8 帧融合）")
 
     ctl = AEBController()
     p = ctl.p
     history = []
     shot_done = False
     stopped_until = None
+    obstacle = None
     try:
+        # 在自车正前方 gap 米处生成静止障碍车
+        # （自车从静止起步，gap 给足加速距离，保证触发全力制动时仍有接近速度。
+        #   实测出生点朝向可能与最近车道相反（双向道路），故直接按自车航向定位；
+        #   路点 z 为 0，需抬高防止车辆陷入地面）
+        obs_bp = None
+        for name in ("vehicle.audi.tt", "vehicle.chevrolet.impala",
+                     "vehicle.lincoln.mkz_2017"):
+            try:
+                obs_bp = world.get_blueprint_library().find(name)
+                break
+            except Exception:  # find() 在不同版本抛 IndexError/RuntimeError
+                continue
+        if obs_bp is None:
+            raise RuntimeError("蓝图库中没有可用的障碍车模型")
+        yaw = math.radians(tf.rotation.yaw)
+        obs_tf = carla.Transform(
+            carla.Location(x=tf.location.x + gap * math.cos(yaw),
+                           y=tf.location.y + gap * math.sin(yaw),
+                           z=tf.location.z + 0.3),
+            tf.rotation)
+        obstacle = world.try_spawn_actor(obs_bp, obs_tf)
+        if obstacle is None:
+            raise RuntimeError("无法生成障碍车")
+        print(f"[demo] 障碍车已生成于 ({obs_tf.location.x:.1f}, "
+              f"{obs_tf.location.y:.1f})")
+
         for step in range(int(90.0 / cc.DT)):
             world.tick()
             t = step * cc.DT
             v = cc.get_speed(ego)
-            if depth["f"] is not None:
-                raw, w, h = depth["f"]
-                d = frame_min_distance(raw, w, h, p.valid_min, p.valid_max)
+            if buf:
+                d = lidar_obstacle_distance(np.vstack(buf), valid_max=p.valid_max)
             else:
                 d = p.valid_max
             closing = max(v, 0.0)  # 障碍车静止
@@ -216,11 +304,12 @@ def run_live(host="127.0.0.1", port=2000, out_dir=ARTIFACTS):
                   f"brake={brake:.2f}", end="\r")
         print()
     finally:
-        for actor in (cam, ego, obstacle):
-            try:
-                actor.destroy()
-            except Exception:  # noqa: BLE001
-                pass
+        for actor in (lidar, ego, obstacle):
+            if actor is not None:
+                try:
+                    actor.destroy()
+                except Exception:  # noqa: BLE001
+                    pass
         cc.restore_async(world)
 
     # 导出
@@ -236,7 +325,7 @@ def run_live(host="127.0.0.1", port=2000, out_dir=ARTIFACTS):
         "t_end": history[-1][0] if history else 0.0,
     }
     png_path = out_dir / "aeb_live_curve.png"
-    plot_curve(history, meta, png_path, title="AEB CARLA 真实场景演示")
+    plot_curve(history, meta, png_path, title="AEB CARLA live demo")
     print(f"[demo] CARLA 演示完成（{meta['t_end']:.1f} s）：")
     print(f"  刹车时刻   t = {meta['brake_time']} s")
     print(f"  最小间隙   {meta['min_gap']:.2f} m")
@@ -262,10 +351,6 @@ def _grab_screenshot(world, ego, out_path):
             shot["img"] = bytes(img.raw_data)
 
     bp = world.get_blueprint_library().find("sensor.camera.rgb")
-    w_attr = bp.get_attribute("image_size_x")
-    h_attr = bp.get_attribute("image_size_y")
-    w = int(w_attr.value)
-    h = int(h_attr.value)
     bp.set_attribute("image_size_x", "800")
     bp.set_attribute("image_size_y", "450")
     tf = ego.get_transform()
@@ -278,7 +363,12 @@ def _grab_screenshot(world, ego, out_path):
     cam = world.spawn_actor(bp, cam_tf)
     try:
         cam.listen(cb)
-        world.tick()
+        # 同步模式下传感器按自身频率出帧（RGB 默认 10 Hz），
+        # 需循环 tick 直到收到一帧
+        for _ in range(12):
+            world.tick()
+            if shot["img"] is not None:
+                break
     finally:
         try:
             cam.stop()
@@ -287,6 +377,9 @@ def _grab_screenshot(world, ego, out_path):
             pass
     if shot["img"] is None:
         print("[demo] 截图失败（未收到图像）")
+        return False
+    if not any(shot["img"]):
+        print("[demo] 截图失败（图像全黑，可能为离屏渲染异常）")
         return False
     arr = np.frombuffer(shot["img"], dtype=np.uint8).reshape(450, 800, 4)
     rgb = arr[:, :, :3][:, :, ::-1].copy()

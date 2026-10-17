@@ -82,27 +82,49 @@ def restore_async(world):
         return False
 
 
+def cleanup_actors(world):
+    """销毁场景中所有车辆与传感器，返回销毁数量。
+
+    演示/仿真世界专用：保证自车确定性地落在干净出生点
+    （残留 actor 会挡住出生点，导致回退到车道不净的其他出生点）。
+    """
+    n = 0
+    for a in world.get_actors():
+        if a.type_id.startswith(("vehicle.", "sensor.")):
+            try:
+                a.destroy()
+                n += 1
+            except Exception:  # noqa: BLE001
+                pass
+    return n
+
+
 def spawn_vehicle(world, blueprint=EGO_BLUEPRINT, transform=None):
     """按蓝图生成自车，返回 (vehicle, transform)。
 
-    transform 为 None 时取地图第一个出生点；该点生成失败时
-    回退到最近可行走路点的变换。
+    transform 为 None 时依次尝试地图前 10 个出生点（个别出生点在部分
+    地图上不可用，实测 Town01_Opt 第一个出生点就生成失败）；
+    每个点直接生成失败时，再用最近可行走路点的变换回退一次。
     """
     _check_carla()
     bp = world.get_blueprint_library().find(blueprint)
     if bp.has_attribute("role_name"):
         bp.set_attribute("role_name", "hero")
-    if transform is None:
-        transform = world.get_map().get_spawn_points()[0]
-    vehicle = world.try_spawn_actor(bp, transform)
-    if vehicle is None:
-        wp = world.get_map().get_waypoint(transform.location)
-        tf = wp.transform
-        tf.location.z += 0.6
+    m = world.get_map()
+    candidates = ([transform] if transform is not None
+                  else m.get_spawn_points()[:10])
+    for tf in candidates:
         vehicle = world.try_spawn_actor(bp, tf)
-    if vehicle is None:
-        raise RuntimeError("无法生成自车，请检查 CARLA 服务端与地图。")
-    return vehicle, transform
+        if vehicle is None:
+            wp = m.get_waypoint(tf.location)
+            if wp is not None:
+                tf2 = wp.transform
+                tf2.location.z += 0.6
+                vehicle = world.try_spawn_actor(bp, tf2)
+                tf = tf2
+        if vehicle is not None:
+            return vehicle, tf
+    raise RuntimeError("无法生成自车，请检查 CARLA 服务端与地图。")
 
 
 def make_depth_camera(world, vehicle, callback, width=640, height=360, fov=90,
@@ -118,6 +140,29 @@ def make_depth_camera(world, vehicle, callback, width=640, height=360, fov=90,
     bp.set_attribute("image_size_y", str(height))
     bp.set_attribute("fov", str(fov))
     tf = carla.Transform(carla.Location(x=x, z=z))
+    sensor = world.spawn_actor(bp, tf, attach_to=vehicle)
+    if tick:
+        world.tick()
+    sensor.listen(callback)
+    return sensor
+
+
+def make_lidar(world, vehicle, callback, z=2.0, range_m=100.0, points_per_second=240000,
+               upper_fov=15.0, lower_fov=-25.0, tick=False):
+    """在车辆顶部（z 米）挂前向 LiDAR，返回 sensor。callback 收到 carla.LidarMeasurement。
+
+    64 通道 / 24 万点每秒：32 通道角分辨率约 11°，50m 处的车仅 2° 张角，
+    采样过于稀疏导致远障碍漏检，故加密。测距算法见 aeb_core.lidar_obstacle_distance。
+    """
+    _check_carla()
+    bp = world.get_blueprint_library().find("sensor.lidar.ray_cast")
+    bp.set_attribute("channels", "64")
+    bp.set_attribute("points_per_second", str(int(points_per_second)))
+    bp.set_attribute("range", str(range_m))
+    bp.set_attribute("rotation_frequency", str(int(round(1.0 / DT))))
+    bp.set_attribute("upper_fov", str(upper_fov))
+    bp.set_attribute("lower_fov", str(lower_fov))
+    tf = carla.Transform(carla.Location(z=z))
     sensor = world.spawn_actor(bp, tf, attach_to=vehicle)
     if tick:
         world.tick()

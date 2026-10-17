@@ -8,9 +8,7 @@
     python3 main.py build             在 ros2 工作区内 colcon 构建本包
     python3 main.py demo              一键演示（默认离线制动曲线；--live 连 CARLA 真跑）
     python3 main.py live [host]       ros2 launch 启动桥接节点 + AEB 节点连 CARLA 服务
-
-demo / live 在后续提交补齐；本提交提供 doctor / test / build。
-"""
+    """
 import argparse
 import importlib
 import os
@@ -66,13 +64,15 @@ def build():
 def demo(args):
     from carla_aeb_braking import demo as demo_mod
     if args.live:
-        return demo_mod.run_live(host=args.host, port=args.port)
+        return demo_mod.run_live(host=args.host, port=args.port, gap=args.gap)
     return demo_mod.run_offline()
 
 
 def live(host):
-    print("live 阶段在提交 2 提供（ros2 launch carla_aeb_braking main.launch.py host:=%s）" % host)
-    return 1
+    print(f"启动 ROS 2 节点（桥接 + AEB 控制）连 CARLA {host}：")
+    print("  ros2 launch carla_aeb_braking main.launch.py host:=%s" % host)
+    return subprocess.call(
+        ["ros2", "launch", "carla_aeb_braking", "main.launch.py", f"host:={host}"])
 
 
 def main(argv=None):
@@ -83,6 +83,8 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=2000, help="CARLA 端口")
     ap.add_argument("--live", action="store_true",
                     help="demo 阶段：连接 CARLA 跑真实场景（默认离线仿真）")
+    ap.add_argument("--gap", type=float, default=50.0,
+                    help="demo --live：障碍车初始距离（米，上限为车道干净距离）")
     a = ap.parse_args(argv)
     if a.stage == "doctor":
         return doctor()
