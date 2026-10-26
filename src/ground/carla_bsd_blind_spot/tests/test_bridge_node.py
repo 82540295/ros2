@@ -72,7 +72,7 @@ class _FakeNode(BSDBridgeNode):
     def __init__(self):
         # 不调用 super().__init__()；手工补齐被测代码用到的成员
         self.frames = 8
-        self.x_min = -8.0
+        self.x_min = -25.0
         self.x_max = 2.0
         self.y_near = 1.8
         self.y_far = 5.0

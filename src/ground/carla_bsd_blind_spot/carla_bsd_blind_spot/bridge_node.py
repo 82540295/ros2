@@ -38,7 +38,7 @@ class BSDBridgeNode(Node):
         self.declare_parameter("blueprint", cc.EGO_BLUEPRINT)
         self.declare_parameter("frames_fuse", 8)
         # 与 bsd_core.blind_zone_distance 一致的盲区窗口参数
-        self.declare_parameter("x_min", -8.0)
+        self.declare_parameter("x_min", -25.0)
         self.declare_parameter("x_max", 2.0)
         self.declare_parameter("y_near", 1.8)
         self.declare_parameter("y_far", 5.0)

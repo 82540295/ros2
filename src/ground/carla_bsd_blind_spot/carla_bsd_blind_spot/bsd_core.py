@@ -4,7 +4,8 @@
 
 盲区定义（传感器系，LiDAR 安装于车顶中心：x 向前、y 向左、z 向上）：
 
-  左盲区：x ∈ [x_min, x_max]（默认 [-8, 2]，斜后方到斜前方），
+  左盲区：x ∈ [x_min, x_max]（默认 [-25, 2]，斜后方 25 m 到斜前方 2 m，
+          覆盖邻车道来车的接近段——与实车 BSD 角雷达 25~60 m 后向探测一致）
           y ∈ [y_near, y_far]（默认 [1.8, 5.0]，相邻车道）
   右盲区：y 取负对称
   z ∈ [z_min, z_max] 为车身高度带（安装高 2.0 m 时对应世界高度约 0.3~1.6 m），
@@ -38,7 +39,7 @@ def parse_lidar_points(data):
     return pts.copy()
 
 
-def blind_zone_distance(points, side="left", x_min=-8.0, x_max=2.0,
+def blind_zone_distance(points, side="left", x_min=-25.0, x_max=2.0,
                         y_near=1.8, y_far=5.0, z_min=-1.7, z_max=-0.4,
                         bin_width=1.0, min_points=6, valid_max=40.0):
     """侧向点云 → 盲区目标距离（米）。
@@ -132,6 +133,8 @@ class BSDController:
             event = ""
             if old != WARN and state == WARN:
                 event = f"{side}_warn"
+            elif old == WARN and state == NORMAL:
+                event = f"{side}_clear"
             out[side] = {
                 "state": state,
                 "approach": approach,
