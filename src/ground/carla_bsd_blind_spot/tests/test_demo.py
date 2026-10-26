@@ -43,14 +43,17 @@ def _ensure_ros_stubs():
 
 _ensure_ros_stubs()
 
+import tempfile
+_TMP = Path(tempfile.mkdtemp(prefix="bsd_test_"))
+
 from carla_bsd_blind_spot import demo  # noqa: E402
 from carla_bsd_blind_spot.bsd_core import BSDController, BSDParams  # noqa: E402
 
 
 class TestOfflineScenario(unittest.TestCase):
 
-    def test_offline_runs_and_exports(self, tmp=None):
-        out_dir = Path(self.enterContext(_tmpdir()))
+    def test_offline_runs_and_exports(self):
+        out_dir = _TMP
         self.assertTrue(demo.run_offline(out_dir=out_dir, ticks=400))
         csv_path = out_dir / "bsd_offline_data.csv"
         self.assertTrue(csv_path.exists())
@@ -74,7 +77,7 @@ class TestOfflineScenario(unittest.TestCase):
 
     def test_offline_never_right_warn(self):
         # 离线场景只有左侧邻车，右侧必须全程 normal
-        out_dir = Path(self.enterContext(_tmpdir()))
+        out_dir = _TMP
         demo.run_offline(out_dir=out_dir, ticks=200)
         rows = list(csv.reader(open(out_dir / "bsd_offline_data.csv")))
         self.assertTrue(all(r[4] == "normal" for r in rows[1:]))
@@ -84,22 +87,12 @@ class TestPlotCurve(unittest.TestCase):
 
     def test_history_shapes_consistent(self):
         # plot 输入由 run_offline 产出，这里验证字段齐全
-        out_dir = Path(self.enterContext(_tmpdir()))
+        out_dir = _TMP
         demo.run_offline(out_dir=out_dir, ticks=50)
         import csv as _csv
         rows = list(_csv.reader(open(out_dir / "bsd_offline_data.csv")))
         for r in rows[1:]:
             self.assertEqual(len(r), 6)
-
-
-import contextlib
-import tempfile
-
-
-@contextlib.contextmanager
-def _tmpdir():
-    with tempfile.TemporaryDirectory() as d:
-        yield d
 
 
 if __name__ == "__main__":

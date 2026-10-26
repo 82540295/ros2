@@ -178,18 +178,37 @@ def run_live(host="127.0.0.1", port=2000, out_dir=ARTIFACTS, gap=45.0, ego_speed
     ctrl = BSDController(BSDParams())
     history = []
     png_left = png_alert = None
+    road_map = world.get_map()
+
+    def _lane_keep_steer(vehicle):
+        """航点跟随转向：瞄向前方 6 m 路点，按航向角差比例修正。
+
+        无转向控制时车辆在微弯道路上会横向漂移（实测邻车 steer=0 漂出
+        侧向窗口导致盲区跟踪断续），自车与邻车共用该保持器。
+        """
+        wp = road_map.get_waypoint(vehicle.get_location())
+        nxt = wp.next(6.0)
+        if not nxt:
+            return 0.0
+        target = nxt[0].transform.location
+        loc = vehicle.get_location()
+        desired = math.atan2(target.y - loc.y, target.x - loc.x)
+        current = math.radians(vehicle.get_transform().rotation.yaw)
+        err = math.atan2(math.sin(desired - current), math.cos(desired - current))
+        return max(-0.3, min(0.3, 1.5 * err))
 
     try:
         dt = 0.05
         prev_left = None
         alerted = False
         for k in range(600):  # 最长 30 s
-            # 邻车油门全开同向直行（0.9 保持车道，0.02 修正漂移）
-            obs.apply_control(carla.VehicleControl(throttle=0.85, steer=0.0))
-            # 自车简单巡航到目标速度
+            # 自车定速巡航 + 车道保持；邻车油门全开 + 车道保持（同向超越）
             v = cc.get_speed(ego)
             throttle = 0.5 if v < ego_speed else 0.0
-            cc.apply_control(ego, throttle=throttle)
+            cc.apply_control(ego, throttle=throttle,
+                             steer=_lane_keep_steer(ego))
+            obs.apply_control(carla.VehicleControl(
+                throttle=0.85, steer=_lane_keep_steer(obs)))
 
             if buf:
                 pts = np.vstack(buf)

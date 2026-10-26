@@ -40,8 +40,8 @@ class BSDBridgeNode(Node):
         # 与 bsd_core.blind_zone_distance 一致的盲区窗口参数
         self.declare_parameter("x_min", -25.0)
         self.declare_parameter("x_max", 2.0)
-        self.declare_parameter("y_near", 1.8)
-        self.declare_parameter("y_far", 5.0)
+        self.declare_parameter("y_near", 2.9)
+        self.declare_parameter("y_far", 4.2)
         self.declare_parameter("min_points", 6)
         self.declare_parameter("valid_max", 40.0)
 

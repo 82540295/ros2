@@ -74,8 +74,8 @@ class _FakeNode(BSDBridgeNode):
         self.frames = 8
         self.x_min = -25.0
         self.x_max = 2.0
-        self.y_near = 1.8
-        self.y_far = 5.0
+        self.y_near = 2.9
+        self.y_far = 4.2
         self.min_points = 6
         self.valid_max = 40.0
         from collections import deque
