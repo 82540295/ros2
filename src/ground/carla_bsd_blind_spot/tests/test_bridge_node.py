@@ -39,7 +39,12 @@ def _ensure_ros_stubs():
         def __init__(self, data=0.0):
             self.data = data
 
+    class String:
+        def __init__(self, data=""):
+            self.data = data
+
     msg_mod.Float32 = Float32
+    msg_mod.String = String
     std_msgs.msg = msg_mod
     sys.modules["std_msgs"] = std_msgs
     sys.modules["std_msgs.msg"] = msg_mod
