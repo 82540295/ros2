@@ -6,7 +6,7 @@
 可离线喂数据测试。
 
 话题：
-  订阅  /bsd/left_distance  /bsd/right_distance  /bsd/ego_speed (std_msgs/Float32)
+  订阅  /bsd/left_distance  /bsd/right_distance (std_msgs/Float32)
   发布  /bsd/alert  (std_msgs/String)   JSON：{"left": "normal|approach|warn", ...}
   发布  /bsd/event  (std_msgs/String)   跃迁事件（left_warn / right_warn / ...）
 
@@ -25,7 +25,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32, String
 
-from .bsd_core import BSDController, BSDParams, NORMAL, WARN
+from .bsd_core import BSDController, BSDParams, WARN
 
 
 class BSDAlertNode(Node):

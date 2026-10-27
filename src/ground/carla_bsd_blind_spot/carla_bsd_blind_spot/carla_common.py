@@ -1,6 +1,6 @@
-"""CARLA 0.9.16 连接与车辆/传感器工具函数（AEB 模块版）。
+"""CARLA 0.9.16 连接与车辆/传感器工具函数。
 
-沿用 carla_perception_control 的已验证惯例：
+沿用 carla_perception_control / carla_aeb_braking 的已验证惯例：
   * carla 惰性导入（未安装时给出友好提示，离线测试不依赖 carla）
   * 同步模式 + 固定步长，逐帧精确控制
   * 退出前必须调用 restore_async()，否则服务端永久停帧

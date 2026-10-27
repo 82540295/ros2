@@ -3,7 +3,6 @@
 运行：python3 main.py test
 """
 
-import math
 import unittest
 
 import numpy as np
@@ -12,10 +11,6 @@ from carla_bsd_blind_spot.bsd_core import (
     NORMAL, WARN, BSDController, BSDParams, blind_zone_distance,
     bsd_decide, estimate_closing, parse_lidar_points,
 )
-
-
-def make_point(x, y, z, intensity=0.5):
-    return np.array([[x, y, z, intensity]], dtype=np.float32)
 
 
 def make_car_body(cx, cy, n=30, z=-1.0):

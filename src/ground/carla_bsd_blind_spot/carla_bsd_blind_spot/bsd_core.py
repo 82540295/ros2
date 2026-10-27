@@ -28,7 +28,7 @@
 两者解耦，便于变道辅助逻辑分别消费。
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 

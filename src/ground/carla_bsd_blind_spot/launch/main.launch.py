@@ -1,7 +1,7 @@
 """BSD 一键启动：CARLA 桥接节点 + BSD 预警节点。
 
-用法：
-    ros2 launch carla_bsd_blind_spot main.launch.py host:=192.168.122.1
+用法（host 填 CARLA 所在机器 IP）：
+    ros2 launch carla_bsd_blind_spot main.launch.py host:=192.168.1.100
 """
 
 import os

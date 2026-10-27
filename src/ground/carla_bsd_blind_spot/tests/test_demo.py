@@ -6,8 +6,6 @@ import types
 import unittest
 from pathlib import Path
 
-import numpy as np
-
 
 def _ensure_ros_stubs():
     """与其它测试一致的幂等桩：保证节点模块可导入。"""
@@ -47,7 +45,6 @@ import tempfile
 _TMP = Path(tempfile.mkdtemp(prefix="bsd_test_"))
 
 from carla_bsd_blind_spot import demo  # noqa: E402
-from carla_bsd_blind_spot.bsd_core import BSDController, BSDParams  # noqa: E402
 
 
 class TestOfflineScenario(unittest.TestCase):

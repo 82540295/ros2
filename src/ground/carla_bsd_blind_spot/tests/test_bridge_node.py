@@ -53,7 +53,6 @@ def _ensure_ros_stubs():
 _ensure_ros_stubs()
 
 from carla_bsd_blind_spot.bridge_node import BSDBridgeNode  # noqa: E402
-from carla_bsd_blind_spot.bsd_core import parse_lidar_points
 
 
 def make_car_body(cx, cy, n=30, z=-1.0):

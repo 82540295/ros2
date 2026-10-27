@@ -81,9 +81,9 @@ def run_offline(out_dir=ARTIFACTS, ticks=400, dt=0.05):
     """离线场景：邻车从左后方 35 m 处以 8 m/s 相对速度接近并超越自车。
 
     合成规则：邻车位于左车道 y≈3.2，自车 x=0；
-    邻车纵向位置 x(t) = -35 + 8*t，当 x ∈ [-8, 2]、y ∈ [1.8, 5] 时
-    落入盲区窗口（与 bsd_core.blind_zone_distance 同参）。
-    点云模拟直接给"目标距离"，另行给出少量孤立杂波验证抗噪。
+    邻车纵向位置 x(t) = -35 + 8*t，当 x ∈ [-25, 2]、y ∈ [2.9, 4.2] 时
+    落入盲区窗口（与 bsd_core.blind_zone_distance 同参），
+    越窗前后测不到目标（返回 valid_max）。
     """
     from carla_bsd_blind_spot.bsd_core import BSDController, BSDParams
 
@@ -199,8 +199,6 @@ def run_live(host="127.0.0.1", port=2000, out_dir=ARTIFACTS, gap=45.0, ego_speed
 
     try:
         dt = 0.05
-        prev_left = None
-        alerted = False
         for k in range(600):  # 最长 30 s
             # 自车定速巡航 + 车道保持；邻车油门全开 + 车道保持（同向超越）
             v = cc.get_speed(ego)
@@ -216,8 +214,6 @@ def run_live(host="127.0.0.1", port=2000, out_dir=ARTIFACTS, gap=45.0, ego_speed
                 right_d = blind_zone_distance(pts, side="right")
             else:
                 left_d = right_d = 40.0
-            closing = ((prev_left - left_d) / dt) if prev_left else 0.0
-            prev_left = left_d
 
             r = ctrl.tick(left_d, right_d, dt)
             lv = {}

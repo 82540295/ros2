@@ -11,7 +11,7 @@
     python3 main.py doctor
     python3 main.py test
     python3 main.py demo
-    python3 main.py demo --live --host 192.168.122.1
+    python3 main.py demo --live --host 192.168.1.100
 """
 
 import sys
