@@ -229,17 +229,18 @@ Ubuntu 22.04 虚拟机（ROS 2 Humble）连宿主机 CARLA 0.9.16（offscreen）
 |---|---|---|---|
 | t=0~1.2s | — | 40 m（无目标） | 自车起步，左侧窗口干净（无植被假报警） |
 | t=1.45s | approach | 22.5 m | 邻车进入 25 m 探测纵深，提前预警 |
-| t=5.95s | **left_warn** | 8.5 m | 邻车穿越盲区窗口 |
-| t=6.4s | **left_clear** | — | 邻车超越通过，恢复 normal |
-| t=6.95s | **right_warn** | —（右 4.5 m） | 道路转弯段，同向邻车变为右侧逼近 |
+| t=5.85s | **left_warn** | 8.5 m | 邻车穿越盲区窗口 |
+| t=6.55s | **left_clear** | — | 邻车超越通过，恢复 normal |
+| t=6.6s | **right_warn** | —（右 4.5 m） | 道路转弯段，同向邻车变为右侧逼近 |
+| t=7.3s | **right_clear** | — | 邻车驶离右侧窗口，双侧恢复 normal |
 
 ### 6.3 指标汇总
 
 | 指标 | 离线演示 | CARLA 实测 |
 |---|---|---|
 | approach 预警 | 22.5 m @ 1.55s | 22.5 m @ 1.45s |
-| 盲区报警 | warn 34 拍（1.7s） | left_warn 0.55s → clear |
-| 恢复事件 | left_clear @ 4.65s | left_clear @ 6.4s |
+| 盲区报警 | warn 34 拍（1.7s） | left_warn 0.7s → clear |
+| 恢复事件 | left_clear @ 4.65s | left_clear @ 6.55s、right_clear @ 7.3s |
 | 交叉验证 | — | right_warn（转弯段右侧独立监测） |
 | 假报警 | 0（40 拍静止段干净） | 0（静止段与超越段均干净） |
 
