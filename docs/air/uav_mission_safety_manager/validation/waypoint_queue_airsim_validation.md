@@ -13,8 +13,10 @@
 
 最后记录位置约 [-0.008804,-0.030834,11.205312]，作者提供的场景截图显示无人机落在屋顶。
 
-取证文件 waypoint_queue_airsim_states.jsonl 保留状态、队列进度、目标或速度变化段的首尾帧。原始流共 5742 条，存于复测机器 ~/queue_validation/airsim_manual/status.txt；该流从起飞后的 EXECUTING 开始，未覆盖初始连接和起飞过程，也不包含命令终端日志或时间戳。帧号表示采样顺序，不代表时间或独立测试次数。
+本地取证文件 waypoint_queue_airsim_states.jsonl 保留状态、队列进度、目标或速度变化段的首尾帧。原始流共 5742 条，存于复测机器 ~/queue_validation/airsim_manual/status.txt；该流从起飞后的 EXECUTING 开始，未覆盖初始连接和起飞过程，也不包含命令终端日志或时间戳。帧号表示采样顺序，不代表时间或独立测试次数。
 
 已知异常：takeoff_rpc_result=false，last_error 保留 AirSim takeoff returned False; airborne state requires telemetry。本轮没有修复此起飞返回值问题。最初在第一轮 COMPLETED 后才暂停的操作不算执行中暂停；有效暂停来自后续 0.2 m/s 的路线。
 
 普通航点使用 1 米到达容差，COMPLETED 不代表精确到点停稳。本轮未验证碰撞、避障、真机、断连或 AirSim 中的显式降落抢占和非法队列拒绝。后两项已有 demo/单元测试，不算本轮 AirSim 实测。测试发生于同一台机器，不替代合并前另一位同学在另一台机器的复测。
+
+原始状态流与生成的日志仅在复测机器本地保留，不纳入源码仓库。
