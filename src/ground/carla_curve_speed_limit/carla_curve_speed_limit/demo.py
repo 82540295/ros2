@@ -112,7 +112,7 @@ def run_offline(out_dir=ARTIFACTS, ticks=600, dt=0.05):
     v = p.cruise_speed
     for k in range(ticks):
         t = k * dt
-        pos_idx = (pos_idx + v * dt) % total
+        pos_idx = min(pos_idx + v * dt, total)   # 走到路径尽头即停（不取模，避免首尾直道方向跳变形成假急弯）
         # 自车当前位置沿路径最近点 idx（简化：直接用弧长定位）
         idx = min(range(len(arc_len)), key=lambda i: abs(arc_len[i] - pos_idx))
         # 前瞻 30m 的路点切片
@@ -234,13 +234,37 @@ def run_live(host="127.0.0.1", port=2000, out_dir=ARTIFACTS, max_seconds=60):
     shots = {}
     n_ticks = int(max_seconds / 0.05)
 
+    def _lane_keep_steer():
+        """航点跟随转向：瞄向前方 6 m 路点，按航向角差比例修正。
+
+        CSL 模块本身只控速度不控转向；演示里自车需要沿车道行驶才能
+        展示"入弯减速、出弯恢复"，故内嵌一个最小车道保持器。
+        """
+        wp = road_map.get_waypoint(ego.get_location())
+        nxt = wp.next(6.0)
+        if not nxt:
+            return 0.0
+        t = nxt[0].transform.location
+        loc = ego.get_location()
+        desired = math.atan2(t.y - loc.y, t.x - loc.x)
+        current = math.radians(ego.get_transform().rotation.yaw)
+        err = math.atan2(math.sin(desired - current), math.cos(desired - current))
+        return max(-0.3, min(0.3, 1.5 * err))
+
     def _front_points():
         loc = ego.get_location()
         wp = road_map.get_waypoint(loc)
         pts = [(loc.x, loc.y)]
-        for w in wp.next_until_look_ahead(p.look_ahead):
-            t = w.transform.location
+        wp_next = wp
+        dist, step = 0.0, 2.0
+        while dist < p.look_ahead:
+            nxt = wp_next.next(step)
+            if not nxt:
+                break
+            wp_next = nxt[0]
+            t = wp_next.transform.location
             pts.append((t.x, t.y))
+            dist += step
         return pts
 
     def _shot(tag):
@@ -257,9 +281,11 @@ def run_live(host="127.0.0.1", port=2000, out_dir=ARTIFACTS, max_seconds=60):
             r = ctrl.tick(target, dt)
             e = r["commanded_speed"] - speed
             if e > 0:
-                cc.apply_control(ego, throttle=min(0.45 * e, 1.0))
+                cc.apply_control(ego, throttle=min(0.45 * e, 1.0),
+                                 steer=_lane_keep_steer())
             else:
-                cc.apply_control(ego, brake=min(0.28 * (-e), 1.0))
+                cc.apply_control(ego, brake=min(0.28 * (-e), 1.0),
+                                 steer=_lane_keep_steer())
 
             ka = waypoint_curvatures(np.asarray(pts))
             m = float(np.max(np.abs(ka))) if len(ka) else 0.0
@@ -282,6 +308,8 @@ def run_live(host="127.0.0.1", port=2000, out_dir=ARTIFACTS, max_seconds=60):
             if k % 20 == 0:
                 print(f"  t={k*dt:5.1f}s  目标={target:4.1f}  指令={r['commanded_speed']:4.1f}  "
                       f"实际={speed:4.1f}  R={radius:5.0f}  {r['state']}")
+
+            world.tick()   # 同步模式：每拍推进仿真，缺 tick 则世界完全静止
     finally:
         csv_path = out_dir / "csl_live_data.csv"
         write_csv(csv_path, [(h["t"], h["v_max"], h["commanded"], h["v"],

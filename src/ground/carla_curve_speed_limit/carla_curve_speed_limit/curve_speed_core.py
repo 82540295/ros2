@@ -138,10 +138,14 @@ class CSLController:
         self._commanded = self.p.cruise_speed
 
     def target_from_points(self, points, dt=0.05):
-        """前瞻路点 → 目标速度（含 v_min 下限与预瞄取严）。"""
+        """前瞻路点 → 目标速度 = min(巡航速度, 预瞄限速)，再受 v_min 兜底。
+
+        限速是上限不是设定值：直道限速=valid_max 时目标回落到巡航速度，
+        弯道限速更低时才减速。
+        """
         p = self.p
         v = target_speed_along(points, p.a_lat_max, p.valid_max)
-        return float(max(v, p.v_min))
+        return float(max(min(v, p.cruise_speed), p.v_min))
 
     def tick(self, target_speed, dt=0.05):
         state, event = csl_decide(self._state, target_speed, self.p)

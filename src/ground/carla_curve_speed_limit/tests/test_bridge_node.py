@@ -89,10 +89,11 @@ class TestControlCache(unittest.TestCase):
 
 class TestTargetSpeed(unittest.TestCase):
 
-    def test_straight_full_speed(self):
+    def test_straight_cruise_cap(self):
         pts = [(i * 1.0, 0.0) for i in range(20)]
         n = _FakeNode()
-        self.assertEqual(n._target_speed(pts), 30.0)  # 直道 = valid_max
+        # 直道限速=valid_max(30)，但目标速度取 min(巡航, 限速) = 巡航 8.0
+        self.assertEqual(n._target_speed(pts), 8.0)
 
     def test_arc_limited(self):
         n = _FakeNode()

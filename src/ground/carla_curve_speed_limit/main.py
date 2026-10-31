@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """carla_curve_speed_limit 统一入口。
 
-阶段（随提交逐步补齐）：
+阶段：
     doctor  依赖体检（python / numpy / pyyaml / carla / ROS）
     test    离线单元测试（不需要 ROS 与 CARLA）
     build   在 ros2 工作区内 colcon 构建本包
-    demo    一键演示（提交 4 提供）
+    demo    一键演示（默认离线弯道场景；--live 连 CARLA 真跑环路巡航）
+
+示例：
+    python3 main.py doctor
+    python3 main.py test
+    python3 main.py demo
+    python3 main.py demo --live --host 192.168.1.100 --seconds 40
 """
 
 import sys
@@ -86,6 +92,9 @@ def main() -> int:
         return test()
     if stage == "build":
         return build()
+    if stage == "demo":
+        from carla_curve_speed_limit import demo
+        return demo.main(sys.argv[2:])
     print(__doc__)
     return 2
 

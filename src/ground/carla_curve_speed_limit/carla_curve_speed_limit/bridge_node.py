@@ -74,15 +74,22 @@ class CSLBridgeNode(Node):
         loc = self.vehicle.get_location()
         wp = self.world.get_map().get_waypoint(loc)
         pts = [(loc.x, loc.y)]
-        for w in wp.next_until_look_ahead(self.p.look_ahead):
-            t = w.transform.location
+        wp_next = wp
+        dist, step = 0.0, 2.0
+        while dist < self.p.look_ahead:
+            nxt = wp_next.next(step)
+            if not nxt:
+                break
+            wp_next = nxt[0]
+            t = wp_next.transform.location
             pts.append((t.x, t.y))
+            dist += step
         return pts
 
     def _target_speed(self, pts):
-        """前瞻路点 → 预瞄目标速度（含 v_min 下限）。"""
+        """前瞻路点 → 目标速度 = min(巡航速度, 预瞄限速)，再受 v_min 兜底。"""
         v = target_speed_along(pts, self.p.a_lat_max, self.p.valid_max)
-        return float(max(v, self.p.v_min))
+        return float(max(min(v, self.p.cruise_speed), self.p.v_min))
 
     def _curve_radius(self, pts):
         """前瞻路点 → 最急弯半径（m）；直道返回 999 哨兵。"""
